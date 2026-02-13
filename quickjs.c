@@ -13907,6 +13907,39 @@ static no_inline __exception int js_binary_arith_slow(JSContext *ctx, JSValue *s
     return -1;
 }
 
+JSValue JS_Mul(JSContext *ctx, JSValueConst op1, JSValueConst op2)
+{
+    JSValue sp[2];
+    double d;
+
+    if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
+        int32_t v1, v2;
+        int64_t r;
+        v1 = JS_VALUE_GET_INT(op1);
+        v2 = JS_VALUE_GET_INT(op2);
+        r = (int64_t)v1 * v2;
+        if (unlikely((int)r != r)) {
+            d = (double)r;
+            goto mul_fp_res;
+        }
+        /* need to test zero case for -0 result */
+        if (unlikely(r == 0 && (v1 | v2) < 0)) {
+            d = -0.0;
+            goto mul_fp_res;
+        }
+        return js_int32(r);
+    } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
+        d = JS_VALUE_GET_FLOAT64(op1) * JS_VALUE_GET_FLOAT64(op2);
+    mul_fp_res:
+        return js_float64(d);
+    }
+    sp[0] = js_dup(op1);
+    sp[1] = js_dup(op2);
+    if (js_binary_arith_slow(ctx, endof(sp), OP_mul))
+        return JS_EXCEPTION;
+    return sp[0];
+}
+
 static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
 {
     JSValue op1, op2;
@@ -18067,35 +18100,15 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
             BREAK;
         CASE(OP_mul):
             {
-                JSValue op1, op2;
-                double d;
-                op1 = sp[-2];
-                op2 = sp[-1];
-                if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
-                    int32_t v1, v2;
-                    int64_t r;
-                    v1 = JS_VALUE_GET_INT(op1);
-                    v2 = JS_VALUE_GET_INT(op2);
-                    r = (int64_t)v1 * v2;
-                    if (unlikely((int)r != r)) {
-                        d = (double)r;
-                        goto mul_fp_res;
-                    }
-                    /* need to test zero case for -0 result */
-                    if (unlikely(r == 0 && (v1 | v2) < 0)) {
-                        d = -0.0;
-                        goto mul_fp_res;
-                    }
-                    sp[-2] = js_int32(r);
-                    sp--;
-                } else if (JS_VALUE_IS_BOTH_FLOAT(op1, op2)) {
-                    d = JS_VALUE_GET_FLOAT64(op1) * JS_VALUE_GET_FLOAT64(op2);
-                mul_fp_res:
-                    sp[-2] = js_float64(d);
-                    sp--;
-                } else {
-                    goto binary_arith_slow;
-                }
+                JSValue ret;
+                ret = JS_Mul(ctx, sp[-2], sp[-1]);
+                if (unlikely(JS_IsException(ret)))
+                    goto exception;
+                JS_FreeValue(ctx, sp[-2]);
+                JS_FreeValue(ctx, sp[-1]);
+                sp[-2] = ret;
+                sp--;
+
             }
             BREAK;
         CASE(OP_div):

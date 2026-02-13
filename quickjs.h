@@ -487,6 +487,9 @@ JS_EXTERN void JS_AddIntrinsicWeakRef(JSContext *ctx);
 JS_EXTERN void JS_AddPerformance(JSContext *ctx);
 JS_EXTERN void JS_AddIntrinsicDOMException(JSContext *ctx);
 
+/* arithmetic operations */
+JS_EXTERN JSValue JS_Mul(JSContext *ctx, JSValueConst op1, JSValueConst op2);
+
 /* for equality comparisons and sameness */
 JS_EXTERN int JS_IsEqual(JSContext *ctx, JSValueConst op1, JSValueConst op2);
 JS_EXTERN bool JS_IsStrictEqual(JSContext *ctx, JSValueConst op1, JSValueConst op2);
