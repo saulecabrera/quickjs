@@ -13940,6 +13940,23 @@ JSValue JS_Mul(JSContext *ctx, JSValueConst op1, JSValueConst op2)
     return sp[0];
 }
 
+static no_inline int js_relational_slow(JSContext *ctx, JSValue *sp,
+                                        OPCodeEnum op);
+
+JSValue JS_Lt(JSContext *ctx, JSValueConst op1, JSValueConst op2)
+{
+    JSValue sp[2];
+
+    if (likely(JS_VALUE_IS_BOTH_INT(op1, op2))) {
+        return js_bool(JS_VALUE_GET_INT(op1) < JS_VALUE_GET_INT(op2));
+    }
+    sp[0] = js_dup(op1);
+    sp[1] = js_dup(op2);
+    if (js_relational_slow(ctx, endof(sp), OP_lt))
+        return JS_EXCEPTION;
+    return sp[0];
+}
+
 static no_inline __exception int js_add_slow(JSContext *ctx, JSValue *sp)
 {
     JSValue op1, op2;
@@ -18437,7 +18454,19 @@ static JSValue JS_CallInternal(JSContext *caller_ctx, JSValueConst func_obj,
                 }                                                       \
             BREAK
 
-            OP_CMP(OP_lt, <, js_relational_slow(ctx, sp, opcode));
+        CASE(OP_lt):
+            {
+                JSValue ret;
+                sf->cur_pc = pc;
+                ret = JS_Lt(ctx, sp[-2], sp[-1]);
+                if (unlikely(JS_IsException(ret)))
+                    goto exception;
+                JS_FreeValue(ctx, sp[-2]);
+                JS_FreeValue(ctx, sp[-1]);
+                sp[-2] = ret;
+                sp--;
+            }
+            BREAK;
             OP_CMP(OP_lte, <=, js_relational_slow(ctx, sp, opcode));
             OP_CMP(OP_gt, >, js_relational_slow(ctx, sp, opcode));
             OP_CMP(OP_gte, >=, js_relational_slow(ctx, sp, opcode));
